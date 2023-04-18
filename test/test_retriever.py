@@ -1,5 +1,8 @@
 import pytest
+import torch
+
 from datamodules.retriever import RetrieverDataModule
+from retriever.criterions import mhop_loss
 from transformers import AutoTokenizer
 import pathlib
 import os
@@ -32,6 +35,26 @@ def test_preprocessed_data_format(dataset_path, max_len, batch_size):
 
     assert batch['q_input_ids'].shape[0] == batch_size
     assert batch['q_input_ids'].shape[1] <= max_len
+
+
+def test_retriever_loss_function_no_momentum():
+    B = 10
+    h = 768
+
+    q = torch.rand(B, h)
+    c1 = torch.rand(B, h)
+    c2 = torch.rand(B, h)
+    neg_1 = torch.rand(B, h)
+    neg_2 = torch.rand(B, h)
+    q_sp1 = torch.rand(B, h)
+
+    batch_output = {'q': q, 'c1': c1, "c2": c2, "neg_1": neg_1, "neg_2": neg_2, "q_sp1": q_sp1}
+    model = lambda x: x
+    loss = mhop_loss(model, batch_output)
+
+
+
+
 
 
 

@@ -7,11 +7,11 @@ class RobertaRetriever(nn.Module):
 
     def __init__(self,
                  config,
-                 args
+                 model_name
                  ):
         super().__init__()
 
-        self.encoder = AutoModel.from_pretrained(args.model_name)
+        self.encoder = AutoModel.from_pretrained(model_name)
         self.project = nn.Sequential(nn.Linear(config.hidden_size, config.hidden_size),
                                      nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps))
 
