@@ -37,12 +37,15 @@ class RetrieverDataModule(pl.LightningDataModule):
         if len(samples) == 0:
             return {}
 
+        if len(samples[0].size()) > 1:
+            samples = [v.view(-1) for v in samples]
+
         max_len = max([len(s) for s in samples])
         batch = []
         for s in samples:
-            batch.append(torch.cat([s, torch.ones(max_len - len(s), dtype=torch.long) * pad_id]))
+            batch.append(torch.cat([s, torch.ones(max_len - len(s), dtype=torch.long) * pad_id], dim=0))
 
-        return torch.stack(batch)
+        return torch.stack(batch, dim=0)
 
     def mhop_collate(self, samples, pad_id=0):
         if len(samples) == 0:
@@ -135,7 +138,7 @@ class RetrieverDataModule(pl.LightningDataModule):
     def setup(self, stage: str):
         dataset = load_from_disk(self.preprocessed_data_dir)
         dataset.set_format('torch', columns=['q_codes', 'q_sp_codes', 'start_para_codes', 'bridge_para_codes',
-                                             'neg_codes_1', 'neg_codes_2', 'answers'], device=self.device)
+                                             'neg_codes_1', 'neg_codes_2'], device=self.device)
         if stage == 'fit':
             train_dataset = dataset['train']
             dev_dataset = dataset['dev']
