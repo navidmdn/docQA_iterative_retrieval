@@ -1,0 +1,31 @@
+seed_everything: 1
+
+trainer:
+  #gpus: 1
+  accelerator: mps
+  devices: 1
+  gradient_clip_val: 0.5
+  max_epochs: 10
+#  accumulate_grad_batches: 32
+  log_every_n_steps: 5
+  check_val_every_n_epoch: 5
+  callbacks:
+    - class_path: pytorch_lightning.callbacks.LearningRateMonitor
+      init_args:
+        logging_interval: step
+
+model:
+  lr: 5e-4
+  retriever_model_name: roberta-base
+
+data:
+  batch_size: 32
+  num_workers: 8
+  max_c_len: 400
+  max_q_len: 200
+  max_q_sp_len: 400
+  train_path: data/hotpot/hotpot_train_with_neg_v0.json
+  dev_path: data/hotpot/hotpot_dev_with_neg_v0.json
+  tokenizer_cp: roberta-base
+  preprocessed_data_dir: data/hotpot/preprocessed_train_dataset
+  device: mps

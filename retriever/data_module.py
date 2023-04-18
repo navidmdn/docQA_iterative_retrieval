@@ -1,29 +1,42 @@
-import lightning.pytorch as pl
-from torch.utils.data import random_split, DataLoader
-from datasets import load_dataset, DatasetDict, load_from_disk
-from transformers import DataCollatorWithPadding
+import pytorch_lightning as pl
+from torch.utils.data import DataLoader
+from transformers import AutoTokenizer
+from datasets import load_dataset, load_from_disk
 from typing import Dict
 import random
 import torch
 
 
 class RetrieverDataModule(pl.LightningDataModule):
-    def __init__(self, tokenizer, train_path, dev_path, test_path, max_q_len, max_q_sp_len, max_c_len,
-                 preprocessed_data_dir, batch_size, device):
+    def __init__(self,
+                 tokenizer_cp: str,
+                 train_path: str,
+                 dev_path: str,
+                 max_c_len: int,
+                 max_q_len: int,
+                 max_q_sp_len: int,
+                 batch_size: int,
+                 preprocessed_data_dir: str,
+                 num_workers: int = 8,
+                 do_test: bool = False,
+                 test_path: str = "",
+                 device: str = "cpu",
+                 train: bool = True,
+                 ):
         super().__init__()
-        self.tokenizer = tokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_cp)
         self.train_path = train_path
         self.dev_path = dev_path
         self.test_path = test_path
         self.device = device
-        self.train = None
-        self.dev = None
-        self.test = None
+        self.train = train
         self.train_loader = None
         self.dev_loader = None
         self.test_loader = None
         self.max_c_len = max_c_len
         self.max_q_len = max_q_len
+        self.do_test = do_test
+        self.num_workers = num_workers
         self.batch_size = batch_size
         self.preprocessed_data_dir = preprocessed_data_dir
         self.max_q_sp_len = max_q_sp_len
@@ -43,7 +56,7 @@ class RetrieverDataModule(pl.LightningDataModule):
         max_len = max([len(s) for s in samples])
         batch = []
         for s in samples:
-            batch.append(torch.cat([s, torch.ones(max_len - len(s), dtype=torch.long) * pad_id], dim=0))
+            batch.append(torch.cat([s, torch.ones(max_len - len(s), dtype=torch.long).to(s) * pad_id], dim=0))
 
         return torch.stack(batch, dim=0)
 
@@ -77,7 +90,8 @@ class RetrieverDataModule(pl.LightningDataModule):
                 'q_type_ids': self.collate_tokens([s["q_codes"]["token_type_ids"].view(-1) for s in samples], pad_id),
                 'c1_type_ids': self.collate_tokens([s["start_para_codes"]["token_type_ids"] for s in samples], pad_id),
                 'c2_type_ids': self.collate_tokens([s["bridge_para_codes"]["token_type_ids"] for s in samples], pad_id),
-                "q_sp_type_ids": self.collate_tokens([s["q_sp_codes"]["token_type_ids"].view(-1) for s in samples], pad_id),
+                "q_sp_type_ids": self.collate_tokens([s["q_sp_codes"]["token_type_ids"].view(-1) for s in samples],
+                                                     pad_id),
                 'neg1_type_ids': self.collate_tokens([s["neg_codes_1"]["token_type_ids"] for s in samples], pad_id),
                 'neg2_type_ids': self.collate_tokens([s["neg_codes_2"]["token_type_ids"] for s in samples], pad_id),
             })
@@ -126,11 +140,19 @@ class RetrieverDataModule(pl.LightningDataModule):
 
     def prepare_data(self):
 
-        raw_dataset = load_dataset('json', data_files={'train': self.train_path, 'dev': self.dev_path,
-                                                       'test': self.test_path})
+        data_files = {'train': self.train_path, 'dev': self.dev_path}
+        if self.do_test:
+            data_files.update({'test': self.test_path})
+
+        raw_dataset = load_dataset('json', data_files=data_files)
+
+        train_ds = raw_dataset['train']
+        print(("train_ds size before filtering:", len(train_ds)))
+        raw_dataset['train'] = train_ds.filter(lambda x: len(x['neg_paras']) > 1)
+        print(("train_ds size after filtering low negative samples:", len(raw_dataset['train'])))
 
         # should we parallelize this here? since it is a pytorch lightning module
-        preprocessed_dataset = raw_dataset.map(self.preprocess_data, batched=False, num_proc=8)
+        preprocessed_dataset = raw_dataset.map(self.preprocess_data, batched=False, num_proc=self.num_workers)
 
         # save processed dataset
         preprocessed_dataset.save_to_disk(self.preprocessed_data_dir)
@@ -143,7 +165,7 @@ class RetrieverDataModule(pl.LightningDataModule):
             train_dataset = dataset['train']
             dev_dataset = dataset['dev']
 
-            #todo: check the datacollator we are using
+            # todo: check the datacollator we are using
             self.train_loader = DataLoader(
                 train_dataset, batch_size=self.batch_size, shuffle=True, collate_fn=self.mhop_collate
             )
@@ -164,4 +186,3 @@ class RetrieverDataModule(pl.LightningDataModule):
 
     def test_dataloader(self):
         return self.test_loader
-

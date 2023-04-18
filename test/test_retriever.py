@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from datamodules.retriever import RetrieverDataModule
+from retriever.data_module import RetrieverDataModule
 from retriever.criterions import mhop_loss
 from transformers import AutoTokenizer
 import pathlib
@@ -15,9 +15,8 @@ def test_preprocessed_data_format(dataset_path, max_len, batch_size):
     current_dir = pathlib.Path(__file__).parent.resolve()
     preprocess_path = os.path.join(current_dir, "preprocessed_data")
 
-    tokenizer = AutoTokenizer.from_pretrained("roberta-base")
     dm = RetrieverDataModule(
-        tokenizer=tokenizer,
+        tokenizer='roberta-base',
         train_path=dataset_path,
         dev_path=dataset_path,
         test_path=dataset_path,
