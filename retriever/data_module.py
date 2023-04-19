@@ -1,4 +1,5 @@
-import pytorch_lightning as pl
+import lightning as pl
+import os
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 from datasets import load_dataset, load_from_disk
@@ -20,7 +21,6 @@ class RetrieverDataModule(pl.LightningDataModule):
                  num_workers: int = 8,
                  do_test: bool = False,
                  test_path: str = "",
-                 device: str = "cpu",
                  train: bool = True,
                  huggingface_cache_dir: str = None,
                  ):
@@ -29,7 +29,6 @@ class RetrieverDataModule(pl.LightningDataModule):
         self.train_path = train_path
         self.dev_path = dev_path
         self.test_path = test_path
-        self.device = device
         self.train = train
         self.train_loader = None
         self.dev_loader = None
@@ -48,7 +47,7 @@ class RetrieverDataModule(pl.LightningDataModule):
                               return_tensors="pt", truncation=True)
 
     @staticmethod
-    def collate_tokens(samples, pad_id=0):
+    def collate_tokens(samples, pad_id):
         if len(samples) == 0:
             return {}
 
@@ -62,7 +61,8 @@ class RetrieverDataModule(pl.LightningDataModule):
 
         return torch.stack(batch, dim=0)
 
-    def mhop_collate(self, samples, pad_id=0):
+    def mhop_collate(self, samples):
+        pad_id = self.tokenizer.pad_token_id
         if len(samples) == 0:
             return {}
 
@@ -141,12 +141,14 @@ class RetrieverDataModule(pl.LightningDataModule):
         }
 
     def prepare_data(self):
+        if os.path.exists(self.preprocessed_data_dir):
+            return
 
         data_files = {'train': self.train_path, 'dev': self.dev_path}
         if self.do_test:
             data_files.update({'test': self.test_path})
 
-        raw_dataset = load_dataset('json', data_files=data_files, cache_dir=self.huggingface_cache_dir)
+        raw_dataset = load_dataset('json', data_files=data_files)
 
         train_ds = raw_dataset['train']
         print(("train_ds size before filtering:", len(train_ds)))
@@ -162,7 +164,7 @@ class RetrieverDataModule(pl.LightningDataModule):
     def setup(self, stage: str):
         dataset = load_from_disk(self.preprocessed_data_dir)
         dataset.set_format('torch', columns=['q_codes', 'q_sp_codes', 'start_para_codes', 'bridge_para_codes',
-                                             'neg_codes_1', 'neg_codes_2'], device=self.device)
+                                             'neg_codes_1', 'neg_codes_2'])
         if stage == 'fit':
             train_dataset = dataset['train']
             dev_dataset = dataset['dev']

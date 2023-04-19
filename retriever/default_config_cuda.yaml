@@ -2,31 +2,33 @@ seed_everything: 1
 
 trainer:
   accelerator: gpu
-  # equivalent to list(range(torch.cuda.device_count()))
-  devices: -1
+  devices: [1]
   gradient_clip_val: 0.5
-  max_epochs: 10
-  log_every_n_steps: 5
-  check_val_every_n_epoch: 5
-  callbacks:
-    - class_path: pytorch_lightning.callbacks.LearningRateMonitor
-      init_args:
-        logging_interval: step
+  max_epochs: 30
+  log_every_n_steps: 25
+  val_check_interval: 0.1
+  precision: 16
+# it's the default behavior
+#  logger:
+#    class_path: lightning.pytorch.loggers.tensorboard.TensorBoardLogger
+#    init_args:
+#      save_dir: lightning_logs
+  gradient_clip_algorithm: norm
 
 model:
-  lr: 5e-4
+  lr: 2e-5
+  warmup_steps: 200
   retriever_model_name: roberta-base
   huggingface_cache_dir: /user/smadani/navid/huggingface_cache
 
 data:
-  batch_size: 32
+  batch_size: 16
   num_workers: 8
-  max_c_len: 400
-  max_q_len: 200
-  max_q_sp_len: 400
+  max_c_len: 300
+  max_q_len: 70
+  max_q_sp_len: 350
   train_path: data/hotpot/hotpot_train_with_neg_v0.json
   dev_path: data/hotpot/hotpot_dev_with_neg_v0.json
   tokenizer_cp: roberta-base
   preprocessed_data_dir: data/hotpot/preprocessed_train_dataset
-  device: mps
   huggingface_cache_dir: /user/smadani/navid/huggingface_cache

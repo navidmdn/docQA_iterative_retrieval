@@ -1,13 +1,13 @@
 import torch
 from torch.nn import CrossEntropyLoss
 import torch.nn.functional as F
+import numpy as np
 
 
-def mhop_loss(model, batch, padding_idx=-1):
+def mhop_loss(model, batch):
     outputs = model(batch)
 
-    # ignore padding tokens loss
-    loss_fct = CrossEntropyLoss(ignore_index=padding_idx)
+    loss_fct = CrossEntropyLoss(ignore_index=-1)
 
     all_ctx = torch.cat([outputs['c1'], outputs['c2']], dim=0) # B x h
     neg_ctx = torch.cat([outputs["neg_1"].unsqueeze(1), outputs["neg_2"].unsqueeze(1)], dim=1)  # B x 2 x h
@@ -44,7 +44,8 @@ def mhop_loss(model, batch, padding_idx=-1):
     return retrieve_loss
 
 
-def mhop_eval(outputs, args):
+def mhop_eval(outputs):
+    #todo: fix duplicate code
     all_ctx = torch.cat([outputs['c1'], outputs['c2']], dim=0)
     neg_ctx = torch.cat([outputs["neg_1"].unsqueeze(1), outputs["neg_2"].unsqueeze(1)], dim=1)
 
@@ -70,8 +71,9 @@ def mhop_eval(outputs, args):
     idx2ranked_2 = ranked_2_hop.argsort(dim=1)
     rrs_1, rrs_2 = [], []
     for t, idx2ranked in zip(target_1_hop, idx2ranked_1):
+        # starts from 0 so +1
         rrs_1.append(1 / (idx2ranked[t].item() + 1))
     for t, idx2ranked in zip(target_2_hop, idx2ranked_2):
         rrs_2.append(1 / (idx2ranked[t].item() + 1))
 
-    return {"rrs_1": rrs_1, "rrs_2": rrs_2}
+    return {"rrs_1": np.mean(rrs_1), "rrs_2": np.mean(rrs_2)}

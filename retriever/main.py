@@ -1,4 +1,4 @@
-from pytorch_lightning.utilities.cli import LightningCLI
+from lightning.pytorch.cli import LightningCLI
 from retriever.data_module import RetrieverDataModule
 from retriever.trainer_module import RetrieverModule
 
@@ -14,7 +14,7 @@ from retriever.trainer_module import RetrieverModule
 
 
 def main() -> None:
-    cli = LightningCLI(RetrieverModule, RetrieverDataModule, save_config_overwrite=True)
+    cli = LightningCLI(RetrieverModule, RetrieverDataModule, save_config_kwargs={"overwrite": True})
     print("Configuration: \n", cli.config)
 
 

@@ -8,6 +8,7 @@ import pathlib
 import os
 
 
+
 @pytest.mark.parametrize("dataset_path", ["data/hotpot/hotpot_dev_with_neg_v0.json",])
 @pytest.mark.parametrize("max_len", [128,])
 @pytest.mark.parametrize("batch_size", [10,])
@@ -16,7 +17,7 @@ def test_preprocessed_data_format(dataset_path, max_len, batch_size):
     preprocess_path = os.path.join(current_dir, "preprocessed_data")
 
     dm = RetrieverDataModule(
-        tokenizer='roberta-base',
+        tokenizer_cp='roberta-base',
         train_path=dataset_path,
         dev_path=dataset_path,
         test_path=dataset_path,
@@ -25,7 +26,6 @@ def test_preprocessed_data_format(dataset_path, max_len, batch_size):
         max_c_len=max_len,
         preprocessed_data_dir=preprocess_path,
         batch_size=batch_size,
-        device='cpu',
     )
     dm.prepare_data()
     dm.setup(stage='fit')
@@ -37,8 +37,8 @@ def test_preprocessed_data_format(dataset_path, max_len, batch_size):
 
 
 def test_retriever_loss_function_no_momentum():
-    B = 10
-    h = 768
+    B = 2
+    h = 5
 
     q = torch.rand(B, h)
     c1 = torch.rand(B, h)
@@ -52,7 +52,24 @@ def test_retriever_loss_function_no_momentum():
     loss = mhop_loss(model, batch_output)
 
 
+def test_if_padding_affects_cls():
+    from retriever.roberta_retriever import RobertaRetriever
+    from transformers import AutoConfig
 
+    config = AutoConfig.from_pretrained('roberta-base')
+    tokenizer = AutoTokenizer.from_pretrained('roberta-base')
+    model = RobertaRetriever(config, 'roberta-base')
+    model.eval()
+
+    text = "This is a test"
+    encs1 = tokenizer(text, return_tensors='pt', padding='max_length', max_length=128, truncation=True)
+    encs2 = tokenizer(text, return_tensors='pt', padding='max_length', max_length=256, truncation=True)
+
+    with torch.no_grad():
+        cls1 = model.encode_seq(encs1['input_ids'], encs1['attention_mask'])
+        cls2 = model.encode_seq(encs2['input_ids'], encs2['attention_mask'])
+
+    assert torch.allclose(cls1, cls2)
 
 
 
