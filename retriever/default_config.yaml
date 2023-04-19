@@ -17,6 +17,7 @@ trainer:
 model:
   lr: 5e-4
   retriever_model_name: roberta-base
+  huggingface_cache_dir: /user/smadani/navid/huggingface_cache
 
 data:
   batch_size: 32
@@ -29,3 +30,4 @@ data:
   tokenizer_cp: roberta-base
   preprocessed_data_dir: data/hotpot/preprocessed_train_dataset
   device: mps
+  huggingface_cache_dir: /user/smadani/navid/huggingface_cache

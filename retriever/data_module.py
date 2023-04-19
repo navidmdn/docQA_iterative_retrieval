@@ -22,9 +22,10 @@ class RetrieverDataModule(pl.LightningDataModule):
                  test_path: str = "",
                  device: str = "cpu",
                  train: bool = True,
+                 huggingface_cache_dir: str = None,
                  ):
         super().__init__()
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_cp)
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_cp, cache_dir=huggingface_cache_dir)
         self.train_path = train_path
         self.dev_path = dev_path
         self.test_path = test_path
@@ -40,6 +41,7 @@ class RetrieverDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.preprocessed_data_dir = preprocessed_data_dir
         self.max_q_sp_len = max_q_sp_len
+        self.huggingface_cache_dir = huggingface_cache_dir
 
     def encode_paragraph(self, paragraph: Dict, max_len: int):
         return self.tokenizer(paragraph["title"].strip(), text_pair=paragraph["text"].strip(), max_length=max_len,
@@ -144,7 +146,7 @@ class RetrieverDataModule(pl.LightningDataModule):
         if self.do_test:
             data_files.update({'test': self.test_path})
 
-        raw_dataset = load_dataset('json', data_files=data_files)
+        raw_dataset = load_dataset('json', data_files=data_files, cache_dir=self.huggingface_cache_dir)
 
         train_ds = raw_dataset['train']
         print(("train_ds size before filtering:", len(train_ds)))
