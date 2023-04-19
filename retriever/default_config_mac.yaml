@@ -1,12 +1,10 @@
 seed_everything: 1
 
 trainer:
-  #gpus: 1
   accelerator: mps
   devices: 1
   gradient_clip_val: 0.5
   max_epochs: 10
-#  accumulate_grad_batches: 32
   log_every_n_steps: 5
   check_val_every_n_epoch: 5
   callbacks:
@@ -17,7 +15,7 @@ trainer:
 model:
   lr: 5e-4
   retriever_model_name: roberta-base
-  huggingface_cache_dir: /user/smadani/navid/huggingface_cache
+  huggingface_cache_dir: None
 
 data:
   batch_size: 32
@@ -30,4 +28,4 @@ data:
   tokenizer_cp: roberta-base
   preprocessed_data_dir: data/hotpot/preprocessed_train_dataset
   device: mps
-  huggingface_cache_dir: /user/smadani/navid/huggingface_cache
+  huggingface_cache_dir: None
