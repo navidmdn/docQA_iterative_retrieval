@@ -76,4 +76,4 @@ def mhop_eval(outputs):
     for t, idx2ranked in zip(target_2_hop, idx2ranked_2):
         rrs_2.append(1 / (idx2ranked[t].item() + 1))
 
-    return {"rrs_1": np.mean(rrs_1), "rrs_2": np.mean(rrs_2)}
+    return {"rrs_1": np.mean(rrs_1), "rrs_2": np.mean(rrs_2), "rss_avg": np.mean([np.mean(rrs_1), np.mean(rrs_2)])}

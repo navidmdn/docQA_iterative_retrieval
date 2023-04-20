@@ -8,12 +8,23 @@ trainer:
   log_every_n_steps: 25
   val_check_interval: 0.1
   precision: 16
+  # run validation before training
+  # num_sanity_val_steps: -1
+
 # it's the default behavior
 #  logger:
 #    class_path: lightning.pytorch.loggers.tensorboard.TensorBoardLogger
 #    init_args:
 #      save_dir: lightning_logs
   gradient_clip_algorithm: norm
+  callbacks:
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        filename: "{epoch}-{rss_avg:.2f}-{train_loss:.2f}"
+        save_top_k: 1
+        monitor: rss_avg
+        mode: max
+        auto_insert_metric_name: false
 
 model:
   lr: 2e-5
@@ -22,7 +33,7 @@ model:
   huggingface_cache_dir: /user/smadani/navid/huggingface_cache
 
 data:
-  batch_size: 16
+  batch_size: 20
   num_workers: 8
   max_c_len: 300
   max_q_len: 70

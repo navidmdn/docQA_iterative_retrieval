@@ -35,8 +35,10 @@ class RetrieverModule(pl.LightningModule):
     def validation_step(self, batch: Batch, batch_idx: int):
         self.retriever.eval()
         with torch.no_grad():
+            # todo: duplicate code; change loss fc
             loss = mhop_loss(self.retriever, batch)
             metrics = mhop_eval(self.retriever(batch))
+
         self.log('val_loss', loss, logger=True)
         self.log_dict(metrics, logger=True)
 
