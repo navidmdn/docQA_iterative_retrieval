@@ -30,13 +30,15 @@ class DataModule:
                  num_workers: int = 8,
                  max_c_len: int = 300,
                  max_q_len: int = 70,
-                 max_q_sp_len: int = 350
+                 max_q_sp_len: int = 350,
+                 cache_dir: str = None
                  ):
         self.train_path = train_path
         self.test_path = test_path
         self.dev_path = dev_path
         self.batch_size = batch_size
         self.max_c_len = max_c_len
+        self.cache_dir = cache_dir
         self.max_q_len = max_q_len
         self.max_q_sp_len = max_q_sp_len
         self.num_workers = num_workers
@@ -60,7 +62,7 @@ class DataModule:
     def mhop_collate(self, samples):
         dict_of_lists = {}
         for k in samples[0].keys():
-            dict_of_lists[k] = torch.tensor([s[k] for s in samples])
+            dict_of_lists[k] = [torch.tensor(s[k]) for s in samples]
 
         batch = {
             'q_input_ids': self.collate_tokens(dict_of_lists["q_input_ids"], pad_id=self.tokenizer.pad_token_id),
@@ -177,7 +179,7 @@ class DataModule:
         if self.test_path is not None:
             data_files.update({'test': self.test_path})
 
-        raw_dataset = datasets.load_dataset('json', data_files=data_files)
+        raw_dataset = datasets.load_dataset('json', data_files=data_files, cache_dir=self.cache_dir)
 
         train_ds = raw_dataset['train']
         print(("train_ds size before filtering:", len(train_ds)))
@@ -186,7 +188,7 @@ class DataModule:
 
         preprocessed_dataset = raw_dataset.map(self.preprocess_data, batched=True, num_proc=self.num_workers,
                                                remove_columns=['question', 'pos_paras', 'neg_paras', 'bridge',
-                                                               'type', 'answers', '_id'], load_from_cache_file=False)
+                                                               'type', 'answers', '_id'])
 
         return {
             'train_dataset': preprocessed_dataset['train'],

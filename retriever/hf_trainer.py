@@ -4,11 +4,18 @@ from retriever.criterions import mhop_loss, mhop_eval
 from typing import Dict, Any, Iterable
 from transformers import get_cosine_schedule_with_warmup
 from typing import Optional
+from tqdm import tqdm
 from dataclasses import dataclass, field
 from retriever.roberta_retriever import RobertaRetriever
 import transformers
 from retriever.hf_dataloader import DataArguments, DataModule
 from transformers import DefaultDataCollator
+from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
+from typing import List
+from transformers.trainer_utils import EvalLoopOutput, EvalPrediction
+from transformers.trainer_pt_utils import IterableDatasetShard, nested_concat
+from transformers.trainer import has_length, find_batch_size, denumpify_detensorize
+import numpy as np
 
 
 @dataclass
@@ -28,6 +35,14 @@ class TrainingArguments(transformers.TrainingArguments):
     epochs: int = field(default=1)
     report_to: str = field(default="tensorboard")
     remove_unused_columns: bool = field(default=False)
+    evaluation_strategy: str = field(default="steps")
+    eval_steps: int = field(default=1)
+    eval_accumulation_steps: int = field(default=1)
+    use_mps_device: bool = field(default=False)
+    per_device_train_batch_size: int = field(default=8)
+    per_device_eval_batch_size: int = field(default=8)
+    save_strategy: str = field(default="steps")
+    save_steps: int = field(default=1000)
 
 
 class Trainer(HFTrainer):
@@ -51,6 +66,65 @@ class Trainer(HFTrainer):
     def compute_loss(self, model, inputs, return_outputs=False):
         return mhop_loss(model, inputs, return_outputs=return_outputs)
 
+    @staticmethod
+    def get_average_metrics(metrics_list: List[Dict]):
+        metrics = {}
+        for key in metrics_list[0].keys():
+            metrics[key] = np.mean([x[key] for x in metrics_list])
+        return metrics
+
+    def evaluation_loop(
+        self,
+        dataloader: DataLoader,
+        description: str,
+        prediction_loss_only: Optional[bool] = None,
+        ignore_keys: Optional[List[str]] = None,
+        metric_key_prefix: str = "eval",
+    ) -> EvalLoopOutput:
+
+        model = self._wrap_model(self.model, training=False, dataloader=dataloader)
+        model.eval()
+        batch_size = self.args.eval_batch_size
+        eval_dataset = getattr(dataloader, "dataset", None)
+
+        num_samples = len(eval_dataset)
+        observed_num_examples = 0
+        num_batches = num_samples//batch_size
+
+        all_metrics = []
+        losses_all = []
+
+        for step, inputs in tqdm(enumerate(dataloader), total=num_batches):
+
+            observed_batch_size = find_batch_size(inputs)
+            observed_num_examples += observed_batch_size
+
+            inputs = self._prepare_inputs(inputs)
+            with torch.no_grad():
+                with self.compute_loss_context_manager():
+                    loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
+                cur_eval_metrics = mhop_eval(outputs)
+                losses_all.append(loss.mean().detach().cpu().numpy())
+                all_metrics.append(cur_eval_metrics)
+
+        metrics = self.get_average_metrics(all_metrics)
+        metrics[f"{metric_key_prefix}_loss"] = np.mean(losses_all)
+        metrics = denumpify_detensorize(metrics)
+
+        # Prefix all keys with metric_key_prefix + '_'
+        for key in list(metrics.keys()):
+            if not key.startswith(f"{metric_key_prefix}_"):
+                metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
+
+        if num_samples == 0 and observed_num_examples > 0:
+            num_samples = observed_num_examples
+
+        return EvalLoopOutput(
+            predictions=None,
+            label_ids=None,
+            metrics=metrics,
+            num_samples=num_samples)
+
 
 def train():
     parser = transformers.HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))
@@ -71,47 +145,19 @@ def train():
         use_fast=False,
     )
 
-    # def compute_metrics(eval_preds):
-    #     result = {}
-    #     preds, labels = eval_preds
-    #
-    #     # remov§ed the token distribution in custom eval loop so don't need the following line
-    #     # preds = np.argmax(preds, axis=-1)
-    #
-    #     # todo: stop after eos token: isn't there a better way to do it?
-    #     preds_list = []
-    #     for p, l in zip(preds, labels):
-    #         # last ignore token is the first prediction
-    #         label_start = max(0, np.where(l != -100)[0][0]-1)
-    #         p = p[label_start:]
-    #         if tokenizer.eos_token_id in p:
-    #             first_pad_idx = np.where(p == tokenizer.eos_token_id)
-    #             if len(first_pad_idx) > 0 and first_pad_idx[0][0] < len(p)-1:
-    #                 p[first_pad_idx[0][0]+1:] = tokenizer.pad_token_id
-    #         preds_list.append(p)
-    #
-    #     decoded_preds = tokenizer.batch_decode(preds_list, skip_special_tokens=True)
-    #     labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
-    #     decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
-    #
-    #     rouge_result = rouge_metric.compute(predictions=decoded_preds, references=decoded_labels, use_stemmer=True)
-    #     exact_match_result = exact_match_metric.compute(predictions=decoded_preds, references=decoded_labels)
-    #     if random() < 0.01:
-    #         print(list(zip(decoded_labels, decoded_preds))[:5])
-    #     generated_pred = np.where(labels == tokenizer.pad_token_id, 0, preds)
-    #     prediction_lens = [np.count_nonzero(pred) for pred in generated_pred]
-    #     rouge_result["gen_len"] = np.mean(prediction_lens)
-    #
-    #     result.update(rouge_result)
-    #     result.update(exact_match_result)
-    #
-    #     return result
+    def compute_metrics(eval_preds):
+        result = {}
+        return {}
+
     data_module = DataModule(tokenizer=tokenizer, train_path=data_args.train_path, test_path=data_args.test_path,
                              dev_path=data_args.dev_path, batch_size=data_args.batch_size,
                              num_workers=data_args.num_workers, max_c_len=data_args.max_c_len,
-                             max_q_len=data_args.max_q_len, max_q_sp_len=data_args.max_q_sp_len)
+                             max_q_len=data_args.max_q_len, max_q_sp_len=data_args.max_q_sp_len,
+                             cache_dir=training_args.cache_dir)
 
     ds_dict = data_module.load_dataset()
+    # print available cuda devices
+    print(torch.cuda.device_count(), torch.cuda.is_available())
     trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, compute_metrics=None, **ds_dict)
     trainer.train()
     trainer.save_state()

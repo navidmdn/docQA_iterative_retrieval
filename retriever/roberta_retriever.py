@@ -21,7 +21,10 @@ class RobertaRetriever(nn.Module):
         vector = self.project(cls_rep)
         return vector
 
-    def forward(self, batch):
+    def forward(self, batch=None, **kwargs):
+        if batch is None:
+            batch = kwargs
+
         c1 = self.encode_seq(batch['c1_input_ids'], batch['c1_mask'])
         c2 = self.encode_seq(batch['c2_input_ids'], batch['c2_mask'])
 
