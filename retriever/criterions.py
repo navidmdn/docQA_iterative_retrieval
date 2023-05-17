@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 
 
-def mhop_loss(model, batch):
+def mhop_loss(model, batch, return_outputs=False):
     outputs = model(batch)
 
     loss_fct = CrossEntropyLoss(ignore_index=-1)
@@ -41,7 +41,7 @@ def mhop_loss(model, batch):
 
     retrieve_loss = loss_fct(scores_1_hop, target_1_hop) + loss_fct(scores_2_hop, target_2_hop)
 
-    return retrieve_loss
+    return retrieve_loss if return_outputs is False else (retrieve_loss, outputs)
 
 
 def mhop_eval(outputs):

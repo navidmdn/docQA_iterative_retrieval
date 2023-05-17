@@ -1,6 +1,6 @@
 from lightning.pytorch.cli import LightningCLI
 from retriever.data_module import RetrieverDataModule
-from retriever.trainer_module import RetrieverModule
+from retriever.lightning_trainer_module import RetrieverModule
 
 
 # class CLI(LightningCLI):
