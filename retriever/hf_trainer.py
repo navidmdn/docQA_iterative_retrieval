@@ -36,13 +36,13 @@ class TrainingArguments(transformers.TrainingArguments):
     report_to: str = field(default="tensorboard")
     remove_unused_columns: bool = field(default=False)
     evaluation_strategy: str = field(default="steps")
-    eval_steps: int = field(default=1)
+    eval_steps: int = field(default=3)
     eval_accumulation_steps: int = field(default=1)
     use_mps_device: bool = field(default=False)
     per_device_train_batch_size: int = field(default=8)
     per_device_eval_batch_size: int = field(default=8)
     save_strategy: str = field(default="steps")
-    save_steps: int = field(default=1000)
+    save_steps: int = field(default=2)
 
 
 class Trainer(HFTrainer):
