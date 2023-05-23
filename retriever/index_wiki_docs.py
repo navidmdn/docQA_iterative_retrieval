@@ -7,8 +7,6 @@ from typing import List, Dict
 import os
 import datasets
 
-datasets.disable_caching()
-
 
 class DocIndexer:
     def __init__(self, model, tokenizer):
