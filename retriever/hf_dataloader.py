@@ -91,7 +91,6 @@ class DataModule:
         return self.tokenizer(sent1s, text_pair=sent2s, max_length=max_len,
                               return_tensors="pt", truncation=True, padding='longest')
 
-
     def preprocess_data(self, samples: Dict) -> Dict:
         samples = [{k: samples[k][i] for k in samples} for i in range(len(samples["question"]))]
         for sample in samples:
