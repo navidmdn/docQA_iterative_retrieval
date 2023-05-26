@@ -62,13 +62,11 @@ if __name__ == '__main__':
     parser.add_argument('--raw_data', type=str, default=None)
     parser.add_argument('--indexpath', type=str, default=None)
     parser.add_argument('--corpus_ds', type=str, default=None)
-    parser.add_argument('--corpus_dict', type=str, default=None)
     parser.add_argument('--cache_dir', type=str, default='models/huggingface')
     parser.add_argument('--base_model_name', type=str, default='roberta-base')
     parser.add_argument('--encoder_path', type=str, default='results/checkpoint-1')
-
-
     parser.add_argument('--topk', type=int, default=2, help="topk paths")
+
     parser.add_argument('--num-workers', type=int, default=10)
     parser.add_argument('--max-q-len', type=int, default=70)
     parser.add_argument('--max-c-len', type=int, default=300)
@@ -152,60 +150,43 @@ if __name__ == '__main__':
                     retrieved_titles.append(hop_1_doc["title"])
                     retrieved_titles.append(hop_2_doc["title"])
 
-                    paths.append([str(hop_1_id), str(hop_2_id)])
-                    path_titles.append([id2doc[str(hop_1_id)]["title"], id2doc[str(hop_2_id)]["title"]])
-                    hop1_titles.append(id2doc[str(hop_1_id)]["title"])
+                    paths.append([hop_1_doc, hop_2_doc])
+                    path_titles.append([hop_1_doc["title"], hop_2_doc["title"]])
+                    hop1_titles.append(hop_1_doc["title"])
 
-                if args.only_eval_ans:
-                    gold_answers = batch_ann[idx]["answer"]
-                    concat_p = "yes no "
-                    for p in paths:
-                        concat_p += " ".join([id2doc[doc_id]["title"] + " " + id2doc[doc_id]["text"] for doc_id in p])
-                    metrics.append({
-                        "question": batch_ann[idx]["question"],
-                        "ans_recall": int(para_has_answer(gold_answers, concat_p, simple_tokenizer)),
-                        "type": batch_ann[idx].get("type", "single")
+                sp = batch_ann[idx]["sp"]
+                assert len(set(sp)) == 2
+                type_ = batch_ann[idx]["type"]
+                question = batch_ann[idx]["question"]
+                p_recall, p_em = 0, 0
+                sp_covered = [sp_title in retrieved_titles for sp_title in sp]
+                if np.sum(sp_covered) > 0:
+                    p_recall = 1
+                if np.sum(sp_covered) == len(sp_covered):
+                    p_em = 1
+                path_covered = [int(set(p) == set(sp)) for p in path_titles]
+                path_covered = np.sum(path_covered) > 0
+                recall_1 = 0
+                covered_1 = [sp_title in hop1_titles for sp_title in sp]
+                if np.sum(covered_1) > 0: recall_1 = 1
+                metrics.append({
+                    "question": question,
+                    "p_recall": p_recall,
+                    "p_em": p_em,
+                    "type": type_,
+                    'recall_1': recall_1,
+                    'path_covered': int(path_covered)
                     })
 
-                else:
-                    sp = batch_ann[idx]["sp"]
-                    assert len(set(sp)) == 2
-                    type_ = batch_ann[idx]["type"]
-                    question = batch_ann[idx]["question"]
-                    p_recall, p_em = 0, 0
-                    sp_covered = [sp_title in retrieved_titles for sp_title in sp]
-                    if np.sum(sp_covered) > 0:
-                        p_recall = 1
-                    if np.sum(sp_covered) == len(sp_covered):
-                        p_em = 1
-                    path_covered = [int(set(p) == set(sp)) for p in path_titles]
-                    path_covered = np.sum(path_covered) > 0
-                    recall_1 = 0
-                    covered_1 = [sp_title in hop1_titles for sp_title in sp]
-                    if np.sum(covered_1) > 0: recall_1 = 1
-                    metrics.append({
-                        "question": question,
-                        "p_recall": p_recall,
-                        "p_em": p_em,
-                        "type": type_,
-                        'recall_1': recall_1,
-                        'path_covered': int(path_covered)
-                    })
-
-                    # saving when there's no annotations
-                    candidaite_chains = []
-                    for path in paths:
-                        candidaite_chains.append([id2doc[path[0]], id2doc[path[1]]])
-
-                    retrieval_outputs.append({
-                        "_id": batch_ann[idx]["_id"],
-                        "question": batch_ann[idx]["question"],
-                        "candidate_chains": candidaite_chains,
-                        # "sp": sp_chain,
-                        # "answer": gold_answers,
-                        # "type": type_,
-                        # "coverd_k": covered_k
-                    })
+                retrieval_outputs.append({
+                    "_id": batch_ann[idx]["_id"],
+                    "question": batch_ann[idx]["question"],
+                    "candidate_chains": paths,
+                    # "sp": sp_chain,
+                    # "answer": gold_answers,
+                    # "type": type_,
+                    # "coverd_k": covered_k
+                })
 
     if args.save_path != "":
         with open(args.save_path, "w") as out:

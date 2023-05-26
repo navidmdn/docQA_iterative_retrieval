@@ -1,0 +1,1 @@
+PYTHONPATH=. python retriever/hf_trainer.py --output_dir results/roberta-base --epochs 50 --eval_steps 1 --evaluation_strategy epoch --per_device_train_batch_size 20 --save_steps 20000 --cache_dir ../hfcache --fp16 True --learning_rate 2e-5 --warmup_ratio 0.1 --train_path data/iter1/hotpot_train_with_neg_v0.json --dev_path data/iter1/hotpot_dev_with_neg_v0.json
