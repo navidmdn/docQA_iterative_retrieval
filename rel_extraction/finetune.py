@@ -33,10 +33,10 @@ def train(
     # training hyperparams
     batch_size: int = 128,
     micro_batch_size: int = 4,
-    num_epochs: int = 3,
+    num_epochs: int = 10,
     learning_rate: float = 3e-4,
     cutoff_len: int = 256,
-    val_set_size: int = 500,
+    val_set_size: int = 100,
     # lora hyperparams
     lora_r: int = 8,
     lora_alpha: int = 16,
@@ -236,7 +236,7 @@ def train(
         args=transformers.TrainingArguments(
             per_device_train_batch_size=micro_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
-            warmup_steps=100,
+            warmup_steps=10,
             num_train_epochs=num_epochs,
             learning_rate=learning_rate,
             fp16=True,
@@ -244,7 +244,7 @@ def train(
             optim="adamw_torch",
             evaluation_strategy="steps" if val_set_size > 0 else "no",
             save_strategy="steps",
-            eval_steps=200 if val_set_size > 0 else None,
+            eval_steps=10 if val_set_size > 0 else None,
             save_steps=200,
             output_dir=output_dir,
             save_total_limit=3,
