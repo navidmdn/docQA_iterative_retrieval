@@ -157,6 +157,7 @@ def train():
 
     ds_dict = data_module.load_dataset()
     # print available cuda devices
+    print(f"train size: {len(ds_dict['train_dataset'])} validation size: {len(ds_dict['eval_dataset'])}")
     print(torch.cuda.device_count(), torch.cuda.is_available())
     trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, compute_metrics=None, **ds_dict)
     trainer.train()
