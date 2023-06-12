@@ -30,12 +30,13 @@ def train(
     base_model: str = "",  # the only required argument
     data_path: str = "yahma/alpaca-cleaned",
     output_dir: str = "./lora-alpaca",
+    cache_dir = None,
     # training hyperparams
     batch_size: int = 128,
     micro_batch_size: int = 4,
     num_epochs: int = 10,
     learning_rate: float = 3e-4,
-    cutoff_len: int = 256,
+    cutoff_len: int = 512,
     val_set_size: int = 100,
     # lora hyperparams
     lora_r: int = 8,
@@ -51,7 +52,7 @@ def train(
     group_by_length: bool = False,  # faster, but produces an odd training loss curve
     # wandb params
     wandb_project: str = "peft-lora-relext",
-    wandb_run_name: str = "default-arguments",
+    wandb_run_name: str = "",
     wandb_watch: str = "all",  # options: false | gradients | all
     wandb_log_model: str = "false",  # options: false | true
     resume_from_checkpoint: str = None,  # either training checkpoint or final adapter
@@ -62,6 +63,7 @@ def train(
             f"Training Alpaca-LoRA model with params:\n"
             f"base_model: {base_model}\n"
             f"data_path: {data_path}\n"
+            f"cache_dir: {cache_dir}\n"
             f"output_dir: {output_dir}\n"
             f"batch_size: {batch_size}\n"
             f"micro_batch_size: {micro_batch_size}\n"
@@ -108,7 +110,7 @@ def train(
         os.environ["WANDB_WATCH"] = wandb_watch
     if len(wandb_log_model) > 0:
         os.environ["WANDB_LOG_MODEL"] = wandb_log_model
-
+    #
     model = LlamaForCausalLM.from_pretrained(
         base_model,
         load_in_8bit=True,
@@ -116,11 +118,27 @@ def train(
         device_map=device_map,
     )
 
+    # model = transformers.GPTJModel.from_pretrained(
+    #     base_model,
+    #     load_in_8bit=True,
+    #     torch_dtype=torch.float16,
+    #     device_map=device_map,
+    #     cache_dir=cache_dir,
+    # )
+
+    # tokenizer = transformers.AutoTokenizer.from_pretrained(base_model, cache_dir=cache_dir)
+
     tokenizer = LlamaTokenizer.from_pretrained(base_model)
 
     tokenizer.pad_token_id = (
         0  # unk. we want this to be different from the eos token
     )
+
+    num_added_tokens = tokenizer.add_tokens(["<head>", "<tail>", "<rel>"])
+
+    print("We have added", num_added_tokens, "tokens")
+    model.resize_token_embeddings(len(tokenizer))
+
     tokenizer.padding_side = "left"  # Allow batched inference
 
     def tokenize(prompt, add_eos_token=True):
@@ -251,7 +269,7 @@ def train(
             load_best_model_at_end=True if val_set_size > 0 else False,
             ddp_find_unused_parameters=False if ddp else None,
             group_by_length=group_by_length,
-            report_to="wandb" if use_wandb else None,
+            report_to="tensorboard",#"wandb" if use_wandb else None,
             run_name=wandb_run_name if use_wandb else None,
         ),
         data_collator=transformers.DataCollatorForSeq2Seq(

@@ -13,7 +13,7 @@ def run(data_path):
     postprocessed_data = []
     for obj in data:
             postprocessed_data.append({
-                "instruction": "extract the relations from the following text",
+                "instruction": "### paragraph:",
                 "input": obj["paragraph"],
                 "output": obj["relations"],
             })

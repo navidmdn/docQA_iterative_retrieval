@@ -23,7 +23,9 @@ def extract_passage_relations(docred_example, rel_info_dict):
     for rel in relations:
         relation_list.append((entity_list[rel['h']], rel_info_dict[rel['r']], entity_list[rel['t']]))
 
-    relations_txt = "\n".join([f"{rel[0]} | {rel[1]} | {rel[2]}" for rel in relation_list])
+    relations_txt = "### relations:"
+    for rel in relation_list:
+        relations_txt += f"<head>{rel[0]}<rel>{rel[1]}<tail>{rel[2]}"
 
     return text, relations_txt
 
@@ -31,7 +33,7 @@ def extract_passage_relations(docred_example, rel_info_dict):
 if __name__ == "__main__":
 
     argparse = argparse.ArgumentParser()
-    argparse.add_argument("--data_path", type=str, default="data/Re-DocRED-main/data/dev_revised.json")
+    argparse.add_argument("--data_path", type=str, default="data/Re-DocRED-main/data/train_revised.json")
     argparse.add_argument("--rel_info_path", type=str, default="data/Re-DocRED-main/rel_info.json")
     args = argparse.parse_args()
 
@@ -51,7 +53,7 @@ if __name__ == "__main__":
         text, relation_text = extract_passage_relations(data_ex, rel_info_dict)
         processed_data.append({'paragraph': text, 'relations': relation_text})
 
-    with open("../data/Re-DocRED-main/docred_pr_pairs_dev.json", 'w') as f:
+    with open("data/Re-DocRED-main/docred_pr_pairs_train.json", 'w') as f:
         for data_ex in processed_data:
             f.write(f"{json.dumps(data_ex)}\n")
 
