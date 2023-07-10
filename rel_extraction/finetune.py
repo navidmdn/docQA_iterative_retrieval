@@ -3,6 +3,7 @@ import sys
 from typing import List
 
 import fire
+import numpy as np
 import torch
 import transformers
 from datasets import load_dataset
@@ -33,11 +34,11 @@ def train(
     cache_dir = None,
     # training hyperparams
     batch_size: int = 128,
-    micro_batch_size: int = 4,
+    micro_batch_size: int = 8,
     num_epochs: int = 10,
     learning_rate: float = 3e-4,
     cutoff_len: int = 512,
-    val_set_size: int = 100,
+    val_set_size: int = 32,
     # lora hyperparams
     lora_r: int = 8,
     lora_alpha: int = 16,
@@ -51,12 +52,12 @@ def train(
     add_eos_token: bool = False,
     group_by_length: bool = False,  # faster, but produces an odd training loss curve
     # wandb params
-    wandb_project: str = "peft-lora-relext",
+    wandb_project: str = "peft-lora-evidence-relation",
     wandb_run_name: str = "",
     wandb_watch: str = "all",  # options: false | gradients | all
     wandb_log_model: str = "false",  # options: false | true
     resume_from_checkpoint: str = None,  # either training checkpoint or final adapter
-    prompt_template_name: str = "custom-alpaca",  # The prompt template to use, will default to alpaca.
+    prompt_template_name: str = "custom-seq2seq",  # The prompt template to use, will default to alpaca.
 ):
     if int(os.environ.get("LOCAL_RANK", 0)) == 0:
         print(
@@ -134,7 +135,7 @@ def train(
         0  # unk. we want this to be different from the eos token
     )
 
-    num_added_tokens = tokenizer.add_tokens(["<head>", "<tail>", "<rel>"])
+    num_added_tokens = tokenizer.add_tokens(["<head>", "<tail>", "<rel>", "<NONE>"])
 
     print("We have added", num_added_tokens, "tokens")
     model.resize_token_embeddings(len(tokenizer))
@@ -172,7 +173,8 @@ def train(
         tokenized_full_prompt = tokenize(full_prompt)
         if not train_on_inputs:
             user_prompt = prompter.generate_prompt(
-                data_point["instruction"], data_point["input"]
+                data_point["instruction"],
+                data_point["input"]
             )
             tokenized_user_prompt = tokenize(
                 user_prompt, add_eos_token=add_eos_token
@@ -202,9 +204,9 @@ def train(
     model = get_peft_model(model, config)
 
     if data_path.endswith(".json") or data_path.endswith(".jsonl"):
-        data = load_dataset("json", data_files=data_path)
+        data = load_dataset("json", data_files=data_path, cache_dir=cache_dir)
     else:
-        data = load_dataset(data_path)
+        data = load_dataset(data_path, cache_dir=cache_dir)
 
     if resume_from_checkpoint:
         # Check the available weights and load them
@@ -230,7 +232,7 @@ def train(
 
     if val_set_size > 0:
         train_val = data["train"].train_test_split(
-            test_size=val_set_size, shuffle=True, seed=42
+            test_size=val_set_size, shuffle=True, seed=42,
         )
         train_data = (
             train_val["train"].shuffle().map(generate_and_tokenize_prompt)
@@ -242,15 +244,32 @@ def train(
         train_data = data["train"].shuffle().map(generate_and_tokenize_prompt)
         val_data = None
 
+    # sanity check
+    sent = train_data[0]["input"]
+    print(f"tokenizing: {sent}")
+    print(f"input_ids: {tokenizer(sent)}")
+
     if not ddp and torch.cuda.device_count() > 1:
         # keeps Trainer from trying its own DataParallelism when more than 1 gpu is available
         model.is_parallelizable = True
         model.model_parallel = True
 
+    def compute_metrics(eval_preds):
+        logits, labels = eval_preds
+        predictions = np.argmax(logits, axis=-1)
+        for pred, label in zip(predictions, labels):
+            gen = np.where(label == -100, tokenizer.pad_token_id, pred)
+            pred_str = tokenizer.decode(gen, skip_special_tokens=True)
+            print(f"pred: {pred_str}")
+
+        return {}
+
+
     trainer = transformers.Trainer(
         model=model,
         train_dataset=train_data,
         eval_dataset=val_data,
+        compute_metrics=compute_metrics,
         args=transformers.TrainingArguments(
             per_device_train_batch_size=micro_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
@@ -263,14 +282,14 @@ def train(
             evaluation_strategy="steps" if val_set_size > 0 else "no",
             save_strategy="steps",
             eval_steps=10 if val_set_size > 0 else None,
-            save_steps=200,
+            save_steps=50,
             output_dir=output_dir,
-            save_total_limit=3,
+            save_total_limit=1,
             load_best_model_at_end=True if val_set_size > 0 else False,
             ddp_find_unused_parameters=False if ddp else None,
             group_by_length=group_by_length,
             report_to="tensorboard",#"wandb" if use_wandb else None,
-            run_name=wandb_run_name if use_wandb else None,
+            # run_name=wandb_run_name if use_wandb else None,
         ),
         data_collator=transformers.DataCollatorForSeq2Seq(
             tokenizer, pad_to_multiple_of=8, return_tensors="pt", padding=True

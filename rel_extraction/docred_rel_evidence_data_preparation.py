@@ -51,11 +51,19 @@ def extract_evidence_relation_pairs(docred_example, rel_info_dict, n_neg=1, no_r
 
             # to avoid overlapping negative pairs
             head_rels[head].append(random_rel)
+
+            # select a random hard evidence
+            related_evidences = [sent for sent in evidences if entity_list[head] in sent]
+            if len(related_evidences) == 0:
+                continue
+
+            random_evidence = random.choice(related_evidences)
+
             result_paris.append({
                 'head': entity_list[head],
                 'relation': random_rel,
                 'tail': no_relation_token,
-                'evidence': ""
+                'evidence': random_evidence
             })
 
     return result_paris
@@ -85,7 +93,9 @@ if __name__ == "__main__":
         for evidence_relation in evidence_relations:
             processed_data.append({
                 "input": f"{evidence_relation['evidence']}<head>{evidence_relation['head']}<rel>{evidence_relation['relation']}<tail>",
-                "output": evidence_relation['tail']
+                "output": evidence_relation['tail'],
+                # just to conform to the format of the original data
+                "instruction": ""
             })
 
     print("Number of examples: ", len(processed_data))
