@@ -38,6 +38,10 @@ def main(
 
     prompter = Prompter(prompt_template)
     tokenizer = LlamaTokenizer.from_pretrained(base_model)
+    num_added_tokens = tokenizer.add_tokens(["<head>", "<tail>", "<rel>"])
+
+    print("We have added", num_added_tokens, "tokens")
+
     if device == "cuda":
         model = LlamaForCausalLM.from_pretrained(
             base_model,
@@ -50,6 +54,8 @@ def main(
             lora_weights,
             # torch_dtype=torch.float16,
         )
+        model.resize_token_embeddings(len(tokenizer))
+
     elif device == "mps":
         model = LlamaForCausalLM.from_pretrained(
             base_model,
