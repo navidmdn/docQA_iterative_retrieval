@@ -121,16 +121,6 @@ def train(
 
     )
 
-    # model = transformers.GPTJModel.from_pretrained(
-    #     base_model,
-    #     load_in_8bit=True,
-    #     torch_dtype=torch.float16,
-    #     device_map=device_map,
-    #     cache_dir=cache_dir,
-    # )
-
-    # tokenizer = transformers.AutoTokenizer.from_pretrained(base_model, cache_dir=cache_dir)
-
     tokenizer = LlamaTokenizer.from_pretrained(base_model)
 
     tokenizer.pad_token_id = (
@@ -167,14 +157,14 @@ def train(
             data_point["input"],
             data_point["output"],
         )
-        tokenized_full_prompt = tokenize(full_prompt)
+        tokenized_full_prompt = tokenize(full_prompt, add_eos_token=True)
         if not train_on_inputs:
             user_prompt = prompter.generate_prompt(
                 data_point["instruction"],
                 data_point["input"]
             )
             tokenized_user_prompt = tokenize(
-                user_prompt, add_eos_token=add_eos_token
+                user_prompt, add_eos_token=False
             )
             user_prompt_len = len(tokenized_user_prompt["input_ids"])
 
@@ -242,9 +232,7 @@ def train(
         val_data = None
 
     # sanity check
-    sent = train_data[0]["input"]
-    print(f"tokenizing: {sent}")
-    print(f"input_ids: {tokenizer(sent)}")
+    print(generate_and_tokenize_prompt(train_data[0]))
 
     if not ddp and torch.cuda.device_count() > 1:
         # keeps Trainer from trying its own DataParallelism when more than 1 gpu is available
@@ -256,16 +244,14 @@ def train(
         predictions = np.argmax(logits, axis=-1)
         for pred, label in zip(predictions, labels):
             last_mask_idx = 0
-            for i in reversed(range(len(label))):
-                if label[i] == -100:
-                    last_mask_idx = i
+            for i in range(len(label)):
+                if label[i] != -100:
+                    last_mask_idx = i - 1
                     break
             pred = pred[last_mask_idx:]
             pred_str = tokenizer.decode(pred, skip_special_tokens=True)
             print(f"pred: {pred_str}")
-
         return {}
-
 
     trainer = transformers.Trainer(
         model=model,

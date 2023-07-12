@@ -159,7 +159,6 @@ def main(
                 return_dict_in_generate=True,
                 output_scores=True,
                 max_new_tokens=max_new_tokens,
-                stopping_criteria=['\n']
             )
         s = generation_output.sequences[0]
         print("output ids:", s)
