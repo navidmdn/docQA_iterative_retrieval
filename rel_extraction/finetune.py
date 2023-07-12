@@ -34,13 +34,13 @@ def train(
     cache_dir = None,
     # training hyperparams
     batch_size: int = 128,
-    micro_batch_size: int = 8,
+    micro_batch_size: int = 16,
     num_epochs: int = 10,
     learning_rate: float = 3e-4,
     cutoff_len: int = 512,
-    val_set_size: int = 32,
+    val_set_size: int = 100,
     # lora hyperparams
-    lora_r: int = 8,
+    lora_r: int = 16,
     lora_alpha: int = 16,
     lora_dropout: float = 0.05,
     lora_target_modules: List[str] = [
@@ -117,6 +117,8 @@ def train(
         load_in_8bit=True,
         torch_dtype=torch.float16,
         device_map=device_map,
+
+
     )
 
     # model = transformers.GPTJModel.from_pretrained(
@@ -134,11 +136,6 @@ def train(
     tokenizer.pad_token_id = (
         0  # unk. we want this to be different from the eos token
     )
-
-    num_added_tokens = tokenizer.add_tokens(["<head>", "<tail>", "<rel>", "<NONE>"])
-
-    print("We have added", num_added_tokens, "tokens")
-    model.resize_token_embeddings(len(tokenizer))
 
     tokenizer.padding_side = "left"  # Allow batched inference
 
@@ -258,8 +255,13 @@ def train(
         logits, labels = eval_preds
         predictions = np.argmax(logits, axis=-1)
         for pred, label in zip(predictions, labels):
-            gen = np.where(label == -100, tokenizer.pad_token_id, pred)
-            pred_str = tokenizer.decode(gen, skip_special_tokens=True)
+            last_mask_idx = 0
+            for i in reversed(range(len(label))):
+                if label[i] == -100:
+                    last_mask_idx = i
+                    break
+            pred = pred[last_mask_idx:]
+            pred_str = tokenizer.decode(pred, skip_special_tokens=True)
             print(f"pred: {pred_str}")
 
         return {}

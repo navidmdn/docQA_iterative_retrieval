@@ -4,7 +4,7 @@ from collections import defaultdict
 import random
 
 
-def extract_evidence_relation_pairs(docred_example, rel_info_dict, n_neg=1, no_relation_token="<NONE>"):
+def extract_evidence_relation_pairs(docred_example, rel_info_dict, n_neg=1, no_relation_token="NORELATION"):
 
     all_rels = list(rel_info_dict.values())
     sents = docred_example['sents']
@@ -92,7 +92,7 @@ if __name__ == "__main__":
         evidence_relations = extract_evidence_relation_pairs(data_ex, rel_info_dict)
         for evidence_relation in evidence_relations:
             processed_data.append({
-                "input": f"{evidence_relation['evidence']}<head>{evidence_relation['head']}<rel>{evidence_relation['relation']}<tail>",
+                "input": f"{evidence_relation['evidence']}\n### head: {evidence_relation['head']}\n### relation: {evidence_relation['relation']}",
                 "output": evidence_relation['tail'],
                 # just to conform to the format of the original data
                 "instruction": ""

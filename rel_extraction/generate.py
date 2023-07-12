@@ -38,9 +38,6 @@ def main(
 
     prompter = Prompter(prompt_template)
     tokenizer = LlamaTokenizer.from_pretrained(base_model)
-    num_added_tokens = tokenizer.add_tokens(["<head>", "<tail>", "<rel>"])
-
-    print("We have added", num_added_tokens, "tokens")
 
     if device == "cuda":
         model = LlamaForCausalLM.from_pretrained(
@@ -49,12 +46,12 @@ def main(
             torch_dtype=torch.float16,
             device_map="auto",
         )
+
         model = PeftModel.from_pretrained(
             model,
             lora_weights,
             # torch_dtype=torch.float16,
         )
-        model.resize_token_embeddings(len(tokenizer))
 
     elif device == "mps":
         model = LlamaForCausalLM.from_pretrained(
@@ -103,7 +100,10 @@ def main(
     ):
         prompt = prompter.generate_prompt(instruction, input)
         inputs = tokenizer(prompt, return_tensors="pt")
+        print("prompt:", prompt)
         input_ids = inputs["input_ids"].to(device)
+        print("input_ids:", input_ids)
+
         generation_config = GenerationConfig(
             temperature=temperature,
             top_p=top_p,
@@ -120,36 +120,36 @@ def main(
             "max_new_tokens": max_new_tokens,
         }
 
-        if stream_output:
-            # Stream the reply 1 token at a time.
-            # This is based on the trick of using 'stopping_criteria' to create an iterator,
-            # from https://github.com/oobabooga/text-generation-webui/blob/ad37f396fc8bcbab90e11ecf17c56c97bfbd4a9c/modules/text_generation.py#L216-L243.
-
-            def generate_with_callback(callback=None, **kwargs):
-                kwargs.setdefault(
-                    "stopping_criteria", transformers.StoppingCriteriaList()
-                )
-                kwargs["stopping_criteria"].append(
-                    Stream(callback_func=callback)
-                )
-                with torch.no_grad():
-                    model.generate(**kwargs)
-
-            def generate_with_streaming(**kwargs):
-                return Iteratorize(
-                    generate_with_callback, kwargs, callback=None
-                )
-
-            with generate_with_streaming(**generate_params) as generator:
-                for output in generator:
-                    # new_tokens = len(output) - len(input_ids[0])
-                    decoded_output = tokenizer.decode(output)
-
-                    if output[-1] in [tokenizer.eos_token_id]:
-                        break
-
-                    yield prompter.get_response(decoded_output)
-            return  # early return for stream_output
+        # if stream_output:
+        #     # Stream the reply 1 token at a time.
+        #     # This is based on the trick of using 'stopping_criteria' to create an iterator,
+        #     # from https://github.com/oobabooga/text-generation-webui/blob/ad37f396fc8bcbab90e11ecf17c56c97bfbd4a9c/modules/text_generation.py#L216-L243.
+        #
+        #     def generate_with_callback(callback=None, **kwargs):
+        #         kwargs.setdefault(
+        #             "stopping_criteria", transformers.StoppingCriteriaList()
+        #         )
+        #         kwargs["stopping_criteria"].append(
+        #             Stream(callback_func=callback)
+        #         )
+        #         with torch.no_grad():
+        #             model.generate(**kwargs)
+        #
+        #     def generate_with_streaming(**kwargs):
+        #         return Iteratorize(
+        #             generate_with_callback, kwargs, callback=None
+        #         )
+        #
+        #     with generate_with_streaming(**generate_params) as generator:
+        #         for output in generator:
+        #             # new_tokens = len(output) - len(input_ids[0])
+        #             decoded_output = tokenizer.decode(output, skip_special_tokens=False)
+        #
+        #             if output[-1] in [tokenizer.eos_token_id]:
+        #                 break
+        #
+        #             yield prompter.get_response(decoded_output)
+        #     return  # early return for stream_output
 
         # Without streaming
         with torch.no_grad():
@@ -159,46 +159,49 @@ def main(
                 return_dict_in_generate=True,
                 output_scores=True,
                 max_new_tokens=max_new_tokens,
+                stopping_criteria=['\n']
             )
         s = generation_output.sequences[0]
-        output = tokenizer.decode(s)
-        yield prompter.get_response(output)
+        print("output ids:", s)
+        output = tokenizer.decode(s, skip_special_tokens=False)
+        print("output:", output)
+        return prompter.get_response(output)
 
-    gr.Interface(
-        fn=evaluate,
-        inputs=[
-            gr.components.Textbox(
-                lines=2,
-                label="Instruction",
-                placeholder="Tell me about alpacas.",
-            ),
-            gr.components.Textbox(lines=2, label="Input", placeholder="none"),
-            gr.components.Slider(
-                minimum=0, maximum=1, value=0.1, label="Temperature"
-            ),
-            gr.components.Slider(
-                minimum=0, maximum=1, value=0.75, label="Top p"
-            ),
-            gr.components.Slider(
-                minimum=0, maximum=100, step=1, value=40, label="Top k"
-            ),
-            gr.components.Slider(
-                minimum=1, maximum=4, step=1, value=4, label="Beams"
-            ),
-            gr.components.Slider(
-                minimum=1, maximum=2000, step=1, value=128, label="Max tokens"
-            ),
-            gr.components.Checkbox(label="Stream output"),
-        ],
-        outputs=[
-            gr.inputs.Textbox(
-                lines=5,
-                label="Output",
-            )
-        ],
-        title="🦙🌲 Alpaca-LoRA",
-        description="Alpaca-LoRA is a 7B-parameter LLaMA model finetuned to follow instructions. It is trained on the [Stanford Alpaca](https://github.com/tatsu-lab/stanford_alpaca) dataset and makes use of the Huggingface LLaMA implementation. For more information, please visit [the project's website](https://github.com/tloen/alpaca-lora).",  # noqa: E501
-    ).queue().launch(server_name="0.0.0.0", share=share_gradio)
+    # gr.Interface(
+    #     fn=evaluate,
+    #     inputs=[
+    #         gr.components.Textbox(
+    #             lines=2,
+    #             label="Instruction",
+    #             placeholder="Tell me about alpacas.",
+    #         ),
+    #         gr.components.Textbox(lines=2, label="Input", placeholder="none"),
+    #         gr.components.Slider(
+    #             minimum=0, maximum=1, value=0.1, label="Temperature"
+    #         ),
+    #         gr.components.Slider(
+    #             minimum=0, maximum=1, value=0.75, label="Top p"
+    #         ),
+    #         gr.components.Slider(
+    #             minimum=0, maximum=100, step=1, value=40, label="Top k"
+    #         ),
+    #         gr.components.Slider(
+    #             minimum=1, maximum=4, step=1, value=4, label="Beams"
+    #         ),
+    #         gr.components.Slider(
+    #             minimum=1, maximum=2000, step=1, value=128, label="Max tokens"
+    #         ),
+    #         gr.components.Checkbox(label="Stream output"),
+    #     ],
+    #     outputs=[
+    #         gr.inputs.Textbox(
+    #             lines=5,
+    #             label="Output",
+    #         )
+    #     ],
+    #     title="🦙🌲 Alpaca-LoRA",
+    #     description="Alpaca-LoRA is a 7B-parameter LLaMA model finetuned to follow instructions. It is trained on the [Stanford Alpaca](https://github.com/tatsu-lab/stanford_alpaca) dataset and makes use of the Huggingface LLaMA implementation. For more information, please visit [the project's website](https://github.com/tloen/alpaca-lora).",  # noqa: E501
+    # ).queue().launch(server_name="0.0.0.0", share=share_gradio)
     # Old testing code follows.
 
     """
@@ -218,6 +221,10 @@ def main(
         print("Response:", evaluate(instruction))
         print()
     """
+
+    while True:
+        inp = input("Enter input: ")
+        print(evaluate(instruction="", input=inp))
 
 
 if __name__ == "__main__":
